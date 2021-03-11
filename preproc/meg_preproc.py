@@ -15,15 +15,11 @@ from os.path import isdir
 import os
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
-import mne_bids
 import mne
 import xlrd
 import shutil as sh
 from mne_bids import write_raw_bids, BIDSPath
-from scipy import stats
-import re
-from scipy import signal
-from moviepy import editor
+
 #%%
 #Loading data
 
@@ -64,85 +60,64 @@ def detect_bad_channel(sub_data, subject_idx='01', run_idx='01'):
     else:
         print('bad channels of sub {} in run {} are {}'.format(subject_idx, run_idx, sub_data.info['bads']))
         
-
-#%% filter raw
-# need to check the limit
-#filter_raw = sub_raw.copy()
-#filter_raw.load_data().filter(l_freq= 0.1, h_freq=None)
-#filter_raw.plot(title = 'filterd data')
-
 #%% artifacts remove      
 
 #ICA
-def arti_detec(data_type='filter', n_components=20, subject_idx='01', run_idx='01', save_pth=os.getcwd()):
+def arti_detec(data, n_components, save_fig, save_pth, data_info):
     """
     use ICA to detect artifacts.
+    Display 3 figures: ICA sources, full duration ICA sources, ICA components topomap
     input variables:
-        data_type: "filter" or "raw"
-        n_components: ICA components
-        subject_idx and run_idx should be str
-        savepth: folder to save ICA images
+        data: meg raw data
+        n_components: int, meg ICA components
+        save: bool, whether to save ICA pics
+        save_pth: folder to save ICA images
+        data_info: [subject_idx, run_idx], subject_idx and run_idx should be str
     
-    output: ICA object
+    Return: ICA object
     """
-    if not isdir(save_pth):
-        os.mkdir(save_pth)
+    if save_fig:
+        if not isdir(save_pth):
+            os.mkdir(save_pth)
     
     ica = mne.preprocessing.ICA(n_components = n_components, random_state=0)
-    if data_type=='filter':
-        ica.fit(filter_raw)
-        ica.detect_artifacts(filter_raw)
-        ica.plot_sources(filter_raw)
-#        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_sources'.format(subject_idx, run_idx)))
-        ica.plot_components()
-#        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_components'.format(subject_idx, run_idx)))
-    elif data_type=='raw':
-        ica.fit(sub_raw)
-        ica.detect_artifacts(sub_raw)
-        ica.plot_sources(sub_raw)
-#        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_sources'.format(subject_idx, run_idx)))
-        ica.plot_components()
-#        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_components'.format(subject_idx, run_idx)))
-    else:
-        raise ValueError('data_type should be "filter" or "raw" ')
+    ica.fit(raw)
+    ica.detect_artifacts(raw)
+    ica.plot_sources(filter_raw)
+    if save_fig:
+        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_sources'.format(data_info[0], data_info[1])))
+    ica.plot_components()
+    if save_fig:
+        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_components'.format(data_info[0], data_info[1])))
+    ica.plot_sources(raw, start=0, stop=raw.times[-1])
+    if save_fig:
+        plt.savefig(pjoin(save_pth, 'sub{}_run{}_icasources_fulldur'.format(data_info[0], data_info[1])))
         
     return ica
 
-#filter_ica = arti_detec('filter', n_components=20)
-
-
 #%% artifacts detecttion for all subject
-sub_list = np.arange(6,7)
-run_list = np.arange(1,2)
-for sub in sub_list:
-    for run in run_list:
-        if sub < 10:
-            sub_idx = '0' + str(sub)
-        else:
-            sub_idx = str(sub)
-        run_idx = '0' + str(run)
+sub_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
+run_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 9)]
+for sub_idx in sub_list:
+    if sub_idx == '01':
+        run_ls = run_list.append('09')
+    else:
+        run_ls = run_list
+    for run_idx in run_ls:
         cwd = os.getcwd()
         img_savepth = pjoin(cwd, 'ICA_images')
         
         sub_raw = load_sub_raw_data(subject_idx=sub_idx, run_idx=run_idx)
-#        sub_raw.info['bads'] = ['MRT53-4503', 'MRT54-4503']
+        # detect bad channels
         detect_bad_channel(sub_raw, subject_idx=sub_idx, run_idx=run_idx)
         filter_raw = sub_raw.copy()
+        # 1Hz high-pass
         filter_raw.load_data().filter(l_freq=1, h_freq=None)
-        filter_ica = arti_detec('filter', n_components=20, subject_idx=sub_idx, run_idx=run_idx, save_pth=img_savepth)
-#        filter_ica.save(pjoin(cwd, 'ICA_artifacts', 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)))
-        
-        full_img_savepth = pjoin(cwd, 'ICA_fulldur')
-        if not isdir(full_img_savepth):
-            os.mkdir(full_img_savepth)
-#            
-#        filter_ica = mne.preprocessing.ICA(n_components=20, random_state=0)
-#        filter_ica.fit(filter_raw)
-        filter_ica.plot_sources(filter_raw, start=0, stop=filter_raw.times[-1])
-#        plt.savefig(pjoin(full_img_savepth, 'sub{}_run{}_icasources_fulldur'.format(sub_idx, run_idx)))
-#        plt.close('all')
+        filter_ica = arti_detec(filter_raw, n_components=20, save_fig=True, save_pth=img_savepth, data_info=[sub_idx, run_idx])
+        filter_ica.save(pjoin(cwd, 'ICA_artifacts', 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)))
    
 #%% creat artifact dictionary
+# artifacts were manually selected and saved as a excel file
 
 fpth = '/nfs/e2/workingshop/daiyuxuan/MEG-paper'
 fname = 'A_IC_1hz_dict.xlsx'
@@ -174,17 +149,14 @@ for idx in np.arange(len(sub_list)):
 wb.release_resources()
 #%% reconstruct raw data
 
-sub_list = np.arange(1,12)
-run_list = np.arange(1,9)
-
-for sub in sub_list:
-    for run in run_list:
-        if sub < 10:
-            sub_idx = '0' + str(sub)
-        else:
-            sub_idx = str(sub)
-        
-        run_idx = '0' + str(run)
+sub_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
+run_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 9)]
+for sub_idx in sub_list:
+    if sub_idx == '01':
+        run_ls = run_list.append('09')
+    else:
+        run_ls = run_list
+    for run_idx in run_ls:
           
         sub_raw = load_sub_raw_data(subject_idx=sub_idx, run_idx=run_idx)
         filter_raw = sub_raw.copy()
@@ -201,57 +173,49 @@ for sub in sub_list:
                 os.mkdir(data_save_pth)
                 
             recons_raw.save(pjoin(data_save_pth, 'sub{}_run{}_preprocessed_meg.fif'.format(sub_idx, run_idx)))
-#        ica = mne.preprocessing.ICA(n_components = 20, random_state=0)
-#        ica.fit(recons_raw)
-#        ica.plot_components()
-#        plt.close('all')
-
-#%% change preprocessed data to bids format
+        
+        # examine the post pre-process data
+        # ica = mne.preprocessing.ICA(n_components = 20, random_state=0)
+        # ica.fit(recons_raw)
+        # ica.plot_components()
+#%% generate events file and change preprocessed data to bids format
     
 bids_root = pjoin(os.getcwd(), 'preprocessed_data')
 task = 'movie'
 ses = 'movie'
 sh.rmtree(bids_root, ignore_errors=True)
 
-sub_list = np.arange(1,12)
-
-for sub in sub_list:
-    if sub == 1:
-        run_list = np.arange(1,10)
+sub_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
+run_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 9)]
+for sub_idx in sub_list:
+    if sub_idx == '01':
+        run_ls = run_list.append('09')
     else:
-        run_list = np.arange(1,9)
-        
-    for run in run_list:
-        if sub < 10:
-            sub_idx = '0' + str(sub)
-        else:
-            sub_idx = str(sub)
-        
-        run_idx = '0' + str(run)
-        
+        run_ls = run_list
+    for run_idx in run_ls:
+
         path = path = '/nfs/s2/userhome/daiyuxuan/workingdir/MEG-paper/preproc_data/sub-{}/ses-movie/meg'.format(sub_idx)
         fname = 'sub-{}_ses-movie_task-movie_run-{}_desc-preproc_meg.fif'.format(sub_idx, run_idx)
         raw = mne.io.read_raw(pjoin(path, fname))
         
-#        sub_ann = raw.annotations
-#        i = 0
-#        bad_seg_idx = []
-#        for item in sub_ann.__iter__():
-#            if item['description'] == 'bad segment':
-#                bad_seg_idx.append(i)
-#            i = i + 1
-#        bad_annot = sub_ann.__getitem__(bad_seg_idx)
+        # sub_ann = raw.annotations
+        # i = 0
+        # bad_seg_idx = []
+        # for item in sub_ann.__iter__():
+        #     if item['description'] == 'bad segment':
+        #         bad_seg_idx.append(i)
+        #     i = i + 1
+        # bad_annot = sub_ann.__getitem__(bad_seg_idx)
 
+        # generate events file
         raw.info['line_freq'] = 50
         raw.set_annotations(None)
         events = mne.find_events(raw, stim_channel='UPPT001', min_duration=2/raw.info['sfreq'])
         events = mne.merge_events(events, list(np.arange(1, 92)), 1)
         events_id = {'beginning': 255, 'watching': 1}
+        # convert data to bids format
         bids_pth = BIDSPath(subject=sub_idx, session=ses, task=task, run=int(run), processing = 'preproc', root=bids_root)
         write_raw_bids(raw, bids_pth, events_data=events, event_id=events_id, overwrite=True)
-        
-#        sub_path = '/nfs/s2/userhome/daiyuxuan/workingdir/MEG-paper/preprocessed_test/sub-{}/ses-movie/meg'.format(sub_idx)
-#        bad_annot.save(pjoin(sub_path, 'sub-08_ses-movie_task-movie_run-{}_annot.fif'.format(run_idx)))
         
 #%% derivatives manipulation
 
@@ -281,31 +245,3 @@ for sub in sub_list:
         
         sh.copy(pjoin(ori_path, 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)), sub_ica_path)
         os.rename(pjoin(sub_ica_path, 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)), pjoin(sub_ica_path, 'sub-{}_ses-movie_task-movie_run-{}_ica.fif.gz'.format(sub_idx, run_idx)))
-
-#%% rename + desc-
-#sub_list = np.arange(1,12)
-#
-#for sub in sub_list:
-#    if sub == 1:
-#        run_list = np.arange(1,10)
-#    else:
-#        run_list = np.arange(1,9)
-#        
-#    if sub < 10:
-#        sub_idx = '0' + str(sub)
-#    else:
-#        sub_idx = str(sub)
-#    
-#    fpath = pjoin(bids_root, 'sub-{}'.format(sub_idx), 'ses-movie', 'meg')
-#    file_list = os.listdir(fpath)    
-#    file_list.sort()
-#    os.rename(pjoin(fpath, file_list[0]), pjoin(fpath, 'sub-{}_ses-movie_desc-preproc_coordsystem.json'.format(sub_idx)))
-#    file_list.pop(0)
-#    
-#    for fname in file_list:
-#        fname_f = fname_f = fname[0:fname.find('run')+6]
-#        fname_l = fname[fname.find('run')+6:-1] + fname[-1]
-#        new_name = fname_f + '_desc-preproc' + fname_l
-#        
-#        os.rename(pjoin(fpath, fname), pjoin(fpath, new_name))
-     
