@@ -23,7 +23,7 @@ from mne_bids import write_raw_bids, BIDSPath
 from scipy import stats
 import re
 from scipy import signal
-from moviepy import editor
+
 #%%
 #Loading data
 
@@ -64,83 +64,62 @@ def detect_bad_channel(sub_data, subject_idx='01', run_idx='01'):
     else:
         print('bad channels of sub {} in run {} are {}'.format(subject_idx, run_idx, sub_data.info['bads']))
         
-
-#%% filter raw
-# need to check the limit
-#filter_raw = sub_raw.copy()
-#filter_raw.load_data().filter(l_freq= 0.1, h_freq=None)
-#filter_raw.plot(title = 'filterd data')
-
 #%% artifacts remove      
 
 #ICA
-def arti_detec(data_type='filter', n_components=20, subject_idx='01', run_idx='01', save_pth=os.getcwd()):
+def arti_detec(data, n_components, save_fig, save_pth, data_info):
     """
     use ICA to detect artifacts.
+    Display 3 figures: ICA sources, full duration ICA sources, ICA components topomap
     input variables:
-        data_type: "filter" or "raw"
-        n_components: ICA components
-        subject_idx and run_idx should be str
-        savepth: folder to save ICA images
+        data: meg raw data
+        n_components: int, meg ICA components
+        save: bool, whether to save ICA pics
+        save_pth: folder to save ICA images
+        data_info: [subject_idx, run_idx], subject_idx and run_idx should be str
     
-    output: ICA object
+    Return: ICA object
     """
-    if not isdir(save_pth):
-        os.mkdir(save_pth)
+    if save_fig:
+        if not isdir(save_pth):
+            os.mkdir(save_pth)
     
     ica = mne.preprocessing.ICA(n_components = n_components, random_state=0)
-    if data_type=='filter':
-        ica.fit(filter_raw)
-        ica.detect_artifacts(filter_raw)
-        ica.plot_sources(filter_raw)
-#        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_sources'.format(subject_idx, run_idx)))
-        ica.plot_components()
-#        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_components'.format(subject_idx, run_idx)))
-    elif data_type=='raw':
-        ica.fit(sub_raw)
-        ica.detect_artifacts(sub_raw)
-        ica.plot_sources(sub_raw)
-#        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_sources'.format(subject_idx, run_idx)))
-        ica.plot_components()
-#        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_components'.format(subject_idx, run_idx)))
-    else:
-        raise ValueError('data_type should be "filter" or "raw" ')
+    ica.fit(raw)
+    ica.detect_artifacts(raw)
+    ica.plot_sources(filter_raw)
+    if save_fig:
+        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_sources'.format(data_info[0], data_info[1])))
+    ica.plot_components()
+    if save_fig:
+        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_components'.format(data_info[0], data_info[1])))
+    ica.plot_sources(raw, start=0, stop=raw.times[-1])
+    if save_fig:
+        plt.savefig(pjoin(save_pth, 'sub{}_run{}_icasources_fulldur'.format(data_info[0], data_info[1])))
         
     return ica
 
-#filter_ica = arti_detec('filter', n_components=20)
-
-
 #%% artifacts detecttion for all subject
-sub_list = np.arange(6,7)
-run_list = np.arange(1,2)
-for sub in sub_list:
-    for run in run_list:
-        if sub < 10:
-            sub_idx = '0' + str(sub)
-        else:
-            sub_idx = str(sub)
-        run_idx = '0' + str(run)
+sub_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
+run_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 9)]
+for sub_idx in sub_list:
+    if sub_idx == '01':
+        run_ls = run_list.append('09')
+    else:
+        run_ls = run_list
+    for run_idx in run_ls:
+        
         cwd = os.getcwd()
         img_savepth = pjoin(cwd, 'ICA_images')
         
         sub_raw = load_sub_raw_data(subject_idx=sub_idx, run_idx=run_idx)
-#        sub_raw.info['bads'] = ['MRT53-4503', 'MRT54-4503']
+        # detect bad channels
         detect_bad_channel(sub_raw, subject_idx=sub_idx, run_idx=run_idx)
         filter_raw = sub_raw.copy()
+        # 1Hz high-pass
         filter_raw.load_data().filter(l_freq=1, h_freq=None)
-        filter_ica = arti_detec('filter', n_components=20, subject_idx=sub_idx, run_idx=run_idx, save_pth=img_savepth)
-#        filter_ica.save(pjoin(cwd, 'ICA_artifacts', 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)))
-        
-        full_img_savepth = pjoin(cwd, 'ICA_fulldur')
-        if not isdir(full_img_savepth):
-            os.mkdir(full_img_savepth)
-#            
-#        filter_ica = mne.preprocessing.ICA(n_components=20, random_state=0)
-#        filter_ica.fit(filter_raw)
-        filter_ica.plot_sources(filter_raw, start=0, stop=filter_raw.times[-1])
-#        plt.savefig(pjoin(full_img_savepth, 'sub{}_run{}_icasources_fulldur'.format(sub_idx, run_idx)))
-#        plt.close('all')
+        filter_ica = arti_detec(filter_raw, n_components=20, save_fig=True, save_pth=img_savepth, data_info=[sub_idx, run_idx])
+        filter_ica.save(pjoin(cwd, 'ICA_artifacts', 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)))
    
 #%% creat artifact dictionary
 
