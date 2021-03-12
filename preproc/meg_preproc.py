@@ -20,14 +20,11 @@ import xlrd
 import shutil as sh
 from mne_bids import write_raw_bids, BIDSPath
 
-#%%
-#Loading data
+#%% 
 
-def load_sub_raw_data(data_folder='/nfs/e5/studyforrest/forrest_movie_meg/', subject_idx='01', run_idx='01'):
+def load_sub_raw_data(bids_root, subject_idx, run_idx):
     """
     load raw meg data. 
-    
-    input value: subject_idx and run_idx should be str
     """
     
     if not isinstance(subject_idx, str):
@@ -36,7 +33,7 @@ def load_sub_raw_data(data_folder='/nfs/e5/studyforrest/forrest_movie_meg/', sub
     if not isinstance(run_idx, str):
         raise ValueError('run_idx must be str')
     
-    subject_data_folder = data_folder + 'sub-' + subject_idx + '/ses-movie/meg'
+    subject_data_folder = pjoin(bids_root, 'sub-{}'.format(subject_idx), 'ses-movie', 'meg')
     fname = 'sub-' + subject_idx + '_ses-movie_task-movie_run-' + run_idx + '_meg.ds'
     raw_data_path = pjoin(subject_data_folder, fname)
     raw_data = mne.io.read_raw_ctf(raw_data_path, preload='True')
@@ -46,27 +43,21 @@ def load_sub_raw_data(data_folder='/nfs/e5/studyforrest/forrest_movie_meg/', sub
 
     return raw_data
 
-#sub_idx = '02'
-#run_idx = '01'
-#sub_raw = load_sub_raw_data(subject_idx=sub_idx, run_idx=run_idx)
-#sub_raw.plot(title = 'raw data')
 
-
-#%%
-#marking bad channels
-def detect_bad_channel(sub_data, subject_idx='01', run_idx='01'):
-    if not sub_data.info['bads']:
-        print('sub {} has no bad channels at run {}'.format(subject_idx, run_idx))
-    else:
-        print('bad channels of sub {} in run {} are {}'.format(subject_idx, run_idx, sub_data.info['bads']))
-        
-#%% artifacts remove      
-
-#ICA
-def arti_detec(data, n_components, save_fig, save_pth, data_info):
+def print_bad_channel(meg_data, subject_idx, run_idx):
     """
-    use ICA to detect artifacts.
-    Display 3 figures: ICA sources, full duration ICA sources, ICA components topomap
+    print bad channel information
+    """
+
+    if not meg_data.info['bads']:
+        print('No bad channels in sub-{} run-{}'.format(subject_idx, run_idx))
+    else:
+        print('Bad channel(s) detected in sub-{} run-{} : {}'.format(subject_idx, run_idx, meg_data.info['bads']))
+            
+
+def perform_ica(data, n_components, save_fig, save_pth, data_info):
+    """
+    perform ICA and save results with 3 figures: ICA sources, full duration ICA sources, ICA components topomap
     input variables:
         data: meg raw data
         n_components: int, meg ICA components
@@ -80,45 +71,64 @@ def arti_detec(data, n_components, save_fig, save_pth, data_info):
         if not isdir(save_pth):
             os.mkdir(save_pth)
     
+    # ICA
     ica = mne.preprocessing.ICA(n_components = n_components, random_state=0)
     ica.fit(raw)
     ica.detect_artifacts(raw)
+    
+    # plot ICA sources
     ica.plot_sources(filter_raw)
     if save_fig:
         plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_sources'.format(data_info[0], data_info[1])))
-    ica.plot_components()
-    if save_fig:
-        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_components'.format(data_info[0], data_info[1])))
+    
+    # plot full duration ICA sources
     ica.plot_sources(raw, start=0, stop=raw.times[-1])
     if save_fig:
         plt.savefig(pjoin(save_pth, 'sub{}_run{}_icasources_fulldur'.format(data_info[0], data_info[1])))
-        
+
+    # plot ICA components topomap
+    ica.plot_components()
+    if save_fig:
+        plt.savefig(pjoin(save_pth, 'sub{}_run{}_ica_components'.format(data_info[0], data_info[1])))
+    
     return ica
 
-#%% artifacts detecttion for all subject
+#%% meg data preprocess and ICA-denoising
+
+# 1. preproc and ICA decomposition
+bids_root = '/nfs/e5/studyforrest/forrest_movie_meg'
+ICA_results_dir = os.getcwd()
+
 sub_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
 run_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 9)]
+
 for sub_idx in sub_list:
+    
+    # get runlist
     if sub_idx == '01':
         run_ls = run_list.append('09')
     else:
         run_ls = run_list
-    for run_idx in run_ls:
-        cwd = os.getcwd()
-        img_savepth = pjoin(cwd, 'ICA_images')
-        
-        sub_raw = load_sub_raw_data(subject_idx=sub_idx, run_idx=run_idx)
-        # detect bad channels
-        detect_bad_channel(sub_raw, subject_idx=sub_idx, run_idx=run_idx)
-        filter_raw = sub_raw.copy()
+    
+    # preproc and ICA
+    for run_idx in run_ls:     
+        sub_raw = load_sub_raw_data(bids_root, subject_idx=sub_idx, run_idx=run_idx)  
+        # print bad channels
+        print_bad_channel(sub_raw, subject_idx=sub_idx, run_idx=run_idx)       
         # 1Hz high-pass
-        filter_raw.load_data().filter(l_freq=1, h_freq=None)
-        filter_ica = arti_detec(filter_raw, n_components=20, save_fig=True, save_pth=img_savepth, data_info=[sub_idx, run_idx])
-        filter_ica.save(pjoin(cwd, 'ICA_artifacts', 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)))
+        filter_raw = sub_raw.copy()
+        filter_raw.load_data().filter(l_freq=1, h_freq=None)     
+        # ICA
+        filter_ica = perform_ica(filter_raw, n_components=20, save_fig=True, save_pth=pjoin(ICA_results_dir, 'ICA_images'), data_info=[sub_idx, run_idx])
+        filter_ica.save(pjoin(ICA_results_dir, 'ICA_artifacts', 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)))
+        
+        print('{} {}done')
    
-#%% creat artifact dictionary
-# artifacts were manually selected and saved as a excel file
+# ==========================================================
+# 2. artifact-ICs were manually selected and saved as a excel file
+# ==========================================================
 
+# 3. read artifact-ICs
 fpth = '/nfs/e2/workingshop/daiyuxuan/MEG-paper'
 fname = 'A_IC_1hz_dict.xlsx'
 
@@ -145,10 +155,9 @@ for idx in np.arange(len(sub_list)):
                 value.append(int(comp))
     
     artifact_dict[key] = value
-
 wb.release_resources()
-#%% reconstruct raw data
 
+# 4. filter out artifact-IC and reconstruct raw data
 sub_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
 run_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 9)]
 for sub_idx in sub_list:
@@ -173,13 +182,9 @@ for sub_idx in sub_list:
                 os.mkdir(data_save_pth)
                 
             recons_raw.save(pjoin(data_save_pth, 'sub{}_run{}_preprocessed_meg.fif'.format(sub_idx, run_idx)))
-        
-        # examine the post pre-process data
-        # ica = mne.preprocessing.ICA(n_components = 20, random_state=0)
-        # ica.fit(recons_raw)
-        # ica.plot_components()
-#%% generate events file and change preprocessed data to bids format
-    
+
+#%% organize preprocessed data to bids format
+
 bids_root = pjoin(os.getcwd(), 'preprocessed_data')
 task = 'movie'
 ses = 'movie'
@@ -193,55 +198,62 @@ for sub_idx in sub_list:
     else:
         run_ls = run_list
     for run_idx in run_ls:
-
-        path = path = '/nfs/s2/userhome/daiyuxuan/workingdir/MEG-paper/preproc_data/sub-{}/ses-movie/meg'.format(sub_idx)
-        fname = 'sub-{}_ses-movie_task-movie_run-{}_desc-preproc_meg.fif'.format(sub_idx, run_idx)
-        raw = mne.io.read_raw(pjoin(path, fname))
         
-        # sub_ann = raw.annotations
-        # i = 0
-        # bad_seg_idx = []
-        # for item in sub_ann.__iter__():
-        #     if item['description'] == 'bad segment':
-        #         bad_seg_idx.append(i)
-        #     i = i + 1
-        # bad_annot = sub_ann.__getitem__(bad_seg_idx)
-
-        # generate events file
-        raw.info['line_freq'] = 50
-        raw.set_annotations(None)
-        events = mne.find_events(raw, stim_channel='UPPT001', min_duration=2/raw.info['sfreq'])
-        events = mne.merge_events(events, list(np.arange(1, 92)), 1)
-        events_id = {'beginning': 255, 'watching': 1}
-        # convert data to bids format
-        bids_pth = BIDSPath(subject=sub_idx, session=ses, task=task, run=int(run), processing = 'preproc', root=bids_root)
-        write_raw_bids(raw, bids_pth, events_data=events, event_id=events_id, overwrite=True)
         
-#%% derivatives manipulation
-
-ori_path = '/nfs/s2/userhome/daiyuxuan/workingdir/MEG-paper/ICA_artifacts'
-deri_path = '/nfs/s2/userhome/daiyuxuan/workingdir/MEG-paper/preproc_data/derivatives'
-
-sub_list = np.arange(1,12)
-
-for sub in sub_list:
-    if sub == 1:
-        run_list = np.arange(1,10)
-    else:
-        run_list = np.arange(1,9)
+        # 1. organize preprocessed data (meg_data, event)
         
-    if sub < 10:
-        sub_idx = '0' + str(sub)
-    else:
-        sub_idx = str(sub)
-    
-    os.mkdir(pjoin(deri_path, 'sub-{}'.format(sub_idx)))
-    os.mkdir(pjoin(deri_path, 'sub-{}'.format(sub_idx), 'ses-movie'))
-    sub_ica_path = pjoin(deri_path, 'sub-{}'.format(sub_idx), 'ses-movie', 'ICA')
-    os.mkdir(sub_ica_path)
-        
-    for run in run_list:
-        run_idx = '0' + str(run)
-        
-        sh.copy(pjoin(ori_path, 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)), sub_ica_path)
-        os.rename(pjoin(sub_ica_path, 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)), pjoin(sub_ica_path, 'sub-{}_ses-movie_task-movie_run-{}_ica.fif.gz'.format(sub_idx, run_idx)))
+        # 1. organize derivtives (ica comp, ica label)
+
+# =============================================================================
+#         path = path = '/nfs/s2/userhome/daiyuxuan/workingdir/MEG-paper/preproc_data/sub-{}/ses-movie/meg'.format(sub_idx)
+#         fname = 'sub-{}_ses-movie_task-movie_run-{}_desc-preproc_meg.fif'.format(sub_idx, run_idx)
+#         raw = mne.io.read_raw(pjoin(path, fname))
+#         
+#         # sub_ann = raw.annotations
+#         # i = 0
+#         # bad_seg_idx = []
+#         # for item in sub_ann.__iter__():
+#         #     if item['description'] == 'bad segment':
+#         #         bad_seg_idx.append(i)
+#         #     i = i + 1
+#         # bad_annot = sub_ann.__getitem__(bad_seg_idx)
+# 
+#         # generate events file
+#         raw.info['line_freq'] = 50
+#         raw.set_annotations(None)
+#         events = mne.find_events(raw, stim_channel='UPPT001', min_duration=2/raw.info['sfreq'])
+#         events = mne.merge_events(events, list(np.arange(1, 92)), 1)
+#         events_id = {'beginning': 255, 'watching': 1}
+#         # convert data to bids format
+#         bids_pth = BIDSPath(subject=sub_idx, session=ses, task=task, run=int(run), processing = 'preproc', root=bids_root)
+#         write_raw_bids(raw, bids_pth, events_data=events, event_id=events_id, overwrite=True)
+#         
+# 
+# ori_path = '/nfs/s2/userhome/daiyuxuan/workingdir/MEG-paper/ICA_artifacts'
+# deri_path = '/nfs/s2/userhome/daiyuxuan/workingdir/MEG-paper/preproc_data/derivatives'
+# 
+# sub_list = np.arange(1,12)
+# 
+# for sub in sub_list:
+#     if sub == 1:
+#         run_list = np.arange(1,10)
+#     else:
+#         run_list = np.arange(1,9)
+#         
+#     if sub < 10:
+#         sub_idx = '0' + str(sub)
+#     else:
+#         sub_idx = str(sub)
+#     
+#     os.mkdir(pjoin(deri_path, 'sub-{}'.format(sub_idx)))
+#     os.mkdir(pjoin(deri_path, 'sub-{}'.format(sub_idx), 'ses-movie'))
+#     sub_ica_path = pjoin(deri_path, 'sub-{}'.format(sub_idx), 'ses-movie', 'ICA')
+#     os.mkdir(sub_ica_path)
+#         
+#     for run in run_list:
+#         run_idx = '0' + str(run)
+#         
+#         sh.copy(pjoin(ori_path, 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)), sub_ica_path)
+#         os.rename(pjoin(sub_ica_path, 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)), pjoin(sub_ica_path, 'sub-{}_ses-movie_task-movie_run-{}_ica.fif.gz'.format(sub_idx, run_idx)))
+# 
+# =============================================================================

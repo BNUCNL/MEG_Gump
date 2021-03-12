@@ -23,6 +23,19 @@ from scipy import signal
 import pandas as pd
 from scipy import signal, fftpack
 
+#%% 4 x 2 notebook, each for one analysis
+
+# =============================================================================
+# 01_compute_headmotion.ipynb
+# 02_plot_headmotion_figure.ipynb
+# 
+# 03_compute_bandSNR.ipynb
+# 04_plot_bandSNR_figure.ipynb
+# 
+# ...
+# =============================================================================
+
+
 #%% define functions for head movement validation
 
 #Loading data
