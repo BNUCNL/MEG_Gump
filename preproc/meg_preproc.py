@@ -117,7 +117,7 @@ def artifacts2csv(artifact_dict, sub_idx, run_idx, save_path):
             artifacts_label.append('signal')           
    
     arti_df = pd.DataFrame({'ComponentIndex':components, 'Label':artifacts_label})
-    arti_df.to_csv(pjoin(save_path, 'sub-{}_ses_movie_task-movie_run-{}_decomposition.tsv'.format(sub_idx, run_idx)), columns=['components', 'label'], sep='\t', index=False)
+    arti_df.to_csv(pjoin(save_path, 'sub-{}_ses_movie_task-movie_run-{}_decomposition.tsv'.format(sub_idx, run_idx)), columns=['ComponentIndex', 'Label'], sep='\t', index=False)
     
 #%% meg data preprocess and ICA-denoising
 
