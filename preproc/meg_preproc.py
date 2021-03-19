@@ -103,12 +103,27 @@ def bids_dir_check(bids_root, sub_idx):
         os.mkdir(pjoin(sub_dir, 'ses-movie', 'meg'))
     else:
         print(f'sub-{sub_idx} bids dir already exist')
+
+def artifacts2csv(artifact_dict, sub_idx, run_idx, save_path):
+    
+    arti_list = artifact_dict['sub{}_run{}'.format(sub_idx, run_idx)]
+    components = np.arange(0,20)
+    
+    artifacts_label = []
+    for i in components:
+        if i in arti_list:
+            artifacts_label.append('artifacts')
+        else:
+            artifacts_label.append('signal')           
+   
+    arti_df = pd.DataFrame({'ComponentIndex':components, 'Label':artifacts_label})
+    arti_df.to_csv(pjoin(save_path, 'sub-{}_ses_movie_task-movie_run-{}_decomposition.tsv'.format(sub_idx, run_idx)), columns=['components', 'label'], sep='\t', index=False)
     
 #%% meg data preprocess and ICA-denoising
 
 # 1. preproc and ICA decomposition
 bids_root = '/nfs/e5/studyforrest/forrest_movie_meg'
-ICA_results_dir = os.getcwd()
+bids_dir = '/nfs/e5/studyforrest/forrest_movie_meg/meg_preproc_data'
 
 sub_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
 run_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 9)]
@@ -129,11 +144,13 @@ for sub_idx in sub_list:
         # 1Hz high-pass
         filter_raw = sub_raw.copy()
         filter_raw.load_data().filter(l_freq=1, h_freq=None)     
-        # ICA
-        filter_ica = perform_ica(filter_raw, n_components=20, save_fig=True, save_pth=pjoin(ICA_results_dir, 'ICA_images'), data_info=[sub_idx, run_idx])
-        filter_ica.save(pjoin(ICA_results_dir, 'ICA_artifacts', 'sub{}_run{}_ica.fif.gz'.format(sub_idx, run_idx)))
         
-        print('{} {}done')
+        # ICA
+        ICA_results_dir = pjoin(bids_dir, )
+        filter_ica = perform_ica(filter_raw, n_components=20, save_fig=False, save_pth=os.getcwd(), data_info=[sub_idx, run_idx])
+        filter_ica.save(pjoin(ICA_results_dir, 'sub-{}_ses-movie_task-movie_run-{}_ica.fif.gz'.format(sub_idx, run_idx)))
+        
+        print('sub-{} run-{} done'.format(sub_idx, run_idx))
    
 # ==========================================================
 # 2. artifact-ICs were manually selected and saved as a excel file
@@ -200,6 +217,9 @@ for sub_idx in sub_list:
         # save pre-proc data
         save_path = pjoin(bids_dir, f'sub-{sub_idx}', 'ses-movie', 'meg')
         recons_raw.save(pjoin(save_path, 'sub-{}_ses-movie_task-movie_run-{}_meg.fif'.format(sub_idx, run_idx)))
-
+        
+        # save artifacts info
+        artifacts2csv(artifact_dict, sub_idx, run_idx, save_path)
+        
     print('sub-{0}: MEG convertion done'.format(sub_idx))
     
