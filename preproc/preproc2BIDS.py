@@ -45,8 +45,17 @@ sublist = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
 for sub in sublist:
     sub_raw_ses_dir = os.path.join(raw_data, 'sub-{0}'.format(sub), 'ses-movie')
     sub_preproc_meg_ses_dir = sub_raw_ses_dir.replace(raw_data, preproc_meg)
+    
+    # cp assosiatived files
     for f in ses_ass_files:
         subprocess.call('cp {0}/{1} {2}'.format(sub_raw_ses_dir, f, sub_preproc_meg_ses_dir), shell=True)
+        # replace .ds with .fif
+        f_path = glob.glob(os.path.join(sub_preproc_meg_ses_dir, f))
+        with open(f_path[0], 'r') as f:
+            content = f.read()
+        with open(f_path[0], 'w') as f:
+            f.write(content.replace('_meg.ds', '_meg.fif'))
+            
     
     sub_raw_meg_dir = os.path.join(sub_raw_ses_dir, 'meg')
     sub_preproc_meg_meg_dir = os.path.join(sub_preproc_meg_ses_dir, 'meg')
@@ -56,7 +65,7 @@ for sub in sublist:
 
 # %% move data to bids_dir
 # raw data
-subprocess.call('mv {0} {1}/{2}'.format(raw_data, bids_dir, 'rawdata'), shell=True)
+subprocess.call('mv {0} {1}'.format(raw_data, bids_dir), shell=True)
 
 # freesurfer
 subprocess.call('mv {0} {1}/{2}'.format(freesurfer_data, bids_preproc_dir, 'sourcedata'), shell=True)
@@ -73,9 +82,6 @@ for sub in sublist:
     subprocess.call('mv {0} {1}'.format(ses_ass_f, bids_preproc_ses_dir), shell=True)
 
 # copy study associated files
-for f in study_ass_files:
-    subprocess.call('cp {0}/{1} {2}'.format(os.path.join(bids_dir, 'rawdata'), f, bids_dir), shell=True)
-
 for f in mri_study_ass_files:
     subprocess.call('cp {0}/{1} {2}'.format(preproc_mri, f, bids_preproc_dir), shell=True)
     
