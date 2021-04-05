@@ -34,7 +34,7 @@ study_ass_files = ['dataset_description.json',
 mri_study_ass_files = ['dataset_description.json',
                        'desc-aparcaseg_dseg.tsv',
                        'desc-aseg_dseg.tsv']
-ses_ass_files = ['*_ses-movie_scans.tsv']
+ses_ass_files = ['*_ses-movie_scans.tsv', '*_ses-movie_task-movie_trans.fif']
 meg_ass_files = ['*_ses-movie_coordsystem.json',
                  '*_channels.tsv',
                  '*_events.tsv',
