@@ -214,6 +214,10 @@ for sub_idx in sub_list:
         else:
             recons_raw = filter_raw.copy()
         
+        # mark bad channels
+        if sub_idx == '05' and run_idx == '05':
+            recons_raw.info['bads'] = ['MRT53-4503', 'MRT54-4503']
+        
         # save pre-proc data
         save_path = pjoin(bids_dir, f'sub-{sub_idx}', 'ses-movie', 'meg')
         recons_raw.save(pjoin(save_path, 'sub-{}_ses-movie_task-movie_run-{}_meg.fif'.format(sub_idx, run_idx)))
