@@ -188,7 +188,7 @@ wb.release_resources()
 # 4. filter out artifact-IC, reconstruct raw data and organize data to BIDS format
 sub_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 12)]
 run_list = ['{0:0>2d}'.format(i) for i in np.arange(1, 9)]
-bids_dir = '/nfs/e5/studyforrest/forrest_movie_meg/meg_preproc_data'
+bids_dir = '/nfs/e5/studyforrest/forrest_movie_meg/gump_meg_bids/derivatives/preproc_meg-mne_mri-fmriprep'
 
 for sub_idx in sub_list:
     if sub_idx == '01':
@@ -204,7 +204,7 @@ for sub_idx in sub_list:
         sub_raw = load_sub_raw_data('/nfs/e5/studyforrest/forrest_movie_meg', subject_idx=sub_idx, run_idx=run_idx)
         filter_raw = sub_raw.copy()
         filter_raw.load_data().filter(l_freq=1, h_freq=None)
-        ica_path = pjoin('/nfs/e5/studyforrest/forrest_movie_meg/meg_preproc_data_bak/derivatives', f'sub-{sub_idx}','ses-movie', 'ICA')
+        ica_path = pjoin(bids_dir,f'sub-{sub_idx}','ses-movie','meg')
         filter_ica = mne.preprocessing.read_ica(pjoin(ica_path, 'sub-{}_ses-movie_task-movie_run-{}_ica.fif.gz'.format(sub_idx, run_idx)))
         
         if artifact_dict['sub{}_run{}'.format(sub_idx, run_idx)]:
@@ -213,6 +213,9 @@ for sub_idx in sub_list:
             filter_ica.apply(recons_raw)
         else:
             recons_raw = filter_raw.copy()
+            
+        # update ica 
+        filter_ica.save(pjoin(ica_path, 'sub-{}_ses-movie_task-movie_run-{}_ica.fif.gz'.format(sub_idx, run_idx)))
         
         # mark bad channels
         if sub_idx == '05' and run_idx == '05':
