@@ -1,6 +1,6 @@
 # ForrestGump-MEG: A audio-visual movie watching MEG dataset
 
-For details please refer to our paper on [] and dataset at https://openneuro.org/datasets/ds003633.
+For details please refer to our paper on [Scientific Data](https://doi.org/10.1038/s41597-022-01299-1) and dataset at [OpenNeuro](https://openneuro.org/datasets/ds003633).
 
 This dataset contains MEG data recorded from 11 subjects while watching the 2h long Chinese-dubbed audio-visual movie 'Forrest Gump'. The data were acquired with a 275-channel CTF MEG. Auxiliary data (T1w) as well as derivation data such as preprocessed data and MEG-MRI co-registration are also included. 
 
